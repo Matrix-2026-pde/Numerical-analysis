@@ -1,0 +1,17 @@
+# LaTeX 编译产物
+*.aux
+*.log
+*.bbl
+*.blg
+*.synctex.gz
+*.out
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# VS Code 设置
+.vscode/
+
+# 临时测试图片
+_test_*.png

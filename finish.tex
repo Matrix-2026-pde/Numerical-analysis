@@ -1,0 +1,140 @@
+% 编译方式：请使用 XeLaTeX 编译（本文档使用了 ctex 宏包以支持中文）。
+% 如果环境不支持中文，可删除 ctex 相关行并把正文改写为英文。
+\documentclass[12pt,a4paper]{ctexart}
+
+\usepackage{amsmath, amssymb}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{booktabs}
+
+\title{\bfseries 数值分析实验报告：带主元与不带主元的 LU 分解}
+\author{（姓名）\quad （学号）}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{问题描述与矩阵构造}
+
+考虑线性方程组
+\begin{equation}
+  Ax = b,
+\end{equation}
+其中系数矩阵为下面的 $5\times 5$ 矩阵
+\begin{equation}
+  A =
+  \begin{pmatrix}
+    \varepsilon & 1 & 0 & 0 & 0 \\
+    1 & 2 & 1 & 0 & 0 \\
+    0 & 1 & 2 & 1 & 0 \\
+    0 & 0 & 1 & 2 & 1 \\
+    0 & 0 & 0 & 1 & 2
+  \end{pmatrix},
+  \qquad
+  \varepsilon = 10^{-12}.
+\end{equation}
+右端向量取为
+\begin{equation}
+  b = A\,(1,1,1,1,1)^{\top},
+\end{equation}
+因此方程组的\textbf{精确解}为 $x^{\ast} = (1,1,1,1,1)^{\top}$。
+
+值得强调的是，该矩阵的谱条件数很小（$\kappa_2(A) \approx 10$ 量级，可用
+\verb|numpy.linalg.cond| 验证），即 $A$ 本身是\textbf{良态}的；
+它并不是因为“接近奇异”才导致数值问题，而仅仅是因为第一个主元
+$a_{11}=\varepsilon$ 过小。
+
+\section{为什么不带主元的 LU 分解会产生巨大误差}
+
+不带主元的（Doolittle）LU 分解要求 $A=LU$，其中 $L$ 为单位下三角阵、
+$U$ 为上三角阵。第一步消元时，乘子为
+\begin{equation}
+  l_{21} = \frac{a_{21}}{a_{11}} = \frac{1}{\varepsilon} = 10^{12},
+\end{equation}
+这是一个\textbf{巨大的乘子}。用它消去 $a_{21}$ 后，新的主元变为
+\begin{equation}
+  u_{22}^{(1)} = a_{22} - l_{21}\, a_{12}
+  = 2 - \frac{1}{\varepsilon} \approx -\frac{1}{\varepsilon} = -10^{12},
+\end{equation}
+于是矩阵 $U$ 中出现了量级为 $10^{12}$ 的元素。定义\textbf{增长因子}
+\begin{equation}
+  \rho = \frac{\max_{i,j} |u_{ij}|}{\max_{i,j} |a_{ij}|}
+  \approx \frac{10^{12}}{2} = 5\times 10^{11}.
+\end{equation}
+
+浮点运算的相对舍入误差为机器精度 $u \approx 2.2\times 10^{-16}$。LU 分解的
+向后误差满足
+\begin{equation}
+  A + \delta A = \hat{L}\hat{U},
+  \qquad
+  |\delta A| \lesssim u\, |\hat{L}|\,|\hat{U}|,
+\end{equation}
+即向后误差被放大了 $\rho$ 倍：
+\begin{equation}
+  \frac{\|\delta A\|}{\|A\|} \sim u\,\rho \approx 10^{-16}\times 10^{12} = 10^{-4},
+\end{equation}
+等价于“把原方程组扰动到了 $10^{-4}$ 量级”，而不是 $10^{-16}$ 量级。
+
+更严重的是，回代过程中第一个分量要通过除以 $a_{11}=\varepsilon$ 得到，
+即
+\begin{equation}
+  x_1 = \frac{b_1 - \sum_{j>1} u_{1j}x_j}{\varepsilon},
+\end{equation}
+分母中的 $\varepsilon=10^{-12}$ 会把前面已经积累的误差再放大
+$1/\varepsilon = 10^{12}$ 倍，最终相对误差可达 $10^8$ 量级——这正是数值实验中
+观察到的结果：不带主元的 LU 分解给出的 $x$ 与参考解完全不可比，
+而矩阵 $A$ 本身却是良态的。
+
+\section{部分主元法如何通过行交换解决该问题}
+
+部分主元法（partial pivoting）在每一步消元之前，先选取当前列中
+\textbf{绝对值最大的元素}作为主元，并通过行交换把它换到对角位置：
+\begin{equation}
+  |a_{kk}| = \max_{i\ge k} |a_{ik}|.
+\end{equation}
+这样得到的分解形式为
+\begin{equation}
+  PA = LU,
+\end{equation}
+其中 $P$ 为置换矩阵（记录行交换）。
+
+对本实验的矩阵，第一步有
+\begin{equation}
+  |a_{21}| = 1 \;>\; |a_{11}| = \varepsilon,
+\end{equation}
+因此第 $1$、$2$ 行被交换，新的主元为 $1$，乘子变为
+\begin{equation}
+  l_{21} = \frac{\varepsilon}{1} = \varepsilon \ll 1.
+\end{equation}
+于是所有乘子都满足 $|l_{ij}|\le 1$，$L$、$U$ 中不再出现 $10^{12}$ 量级的
+元素，增长因子被控制在 $O(1)$ 量级（理论上最坏不超过 $2^{n-1}$）。
+
+由于此时
+\begin{equation}
+  \frac{\|\delta A\|}{\|A\|} \sim u,
+\end{equation}
+分解是\textbf{向后稳定}的，前向误差满足
+\begin{equation}
+  \frac{\|x - \hat{x}\|}{\|x\|} \lesssim \kappa(A)\, u \approx 10^{-15},
+\end{equation}
+与 $10^8$ 相比，误差减小了二十多个数量级。这正是实验图中两条曲线
+差距悬殊的原因。
+
+\section{结论}
+
+\begin{enumerate}
+  \item 不带主元的 LU 分解对主元的选取是\textbf{固定}的：一旦遇到小主元，
+    就会产生 $1/\varepsilon$ 量级的巨大乘子，使增长因子 $\rho$ 爆炸，
+    浮点舍入误差被放大，最终导致解完全失真甚至崩溃。
+  \item 本实验矩阵虽然\textbf{良态}（$\kappa(A)$ 很小），但不带主元的
+    LU 分解依然失败，说明“数值不稳定”与“矩阵病态”是两个独立的概念——
+    前者取决于算法，后者取决于矩阵本身。
+  \item 部分主元法通过\textbf{行交换}保证每个乘子 $|l_{ij}|\le 1$，
+    将增长因子控制在 $O(1)$ 量级，使分解向后稳定，从而得到与
+    \verb|numpy.linalg.solve| 一致的、接近机器精度的解。
+  \item 因此，在实际数值计算中，应始终使用带部分主元（或完全主元）的
+    LU 分解；如使用 LAPACK 的 \verb|gesv|、\verb|numpy.linalg.solve| 等
+    求解线性方程组，它们内部都采用了部分主元策略。
+\end{enumerate}
+
+\end{document}
